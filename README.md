@@ -14,7 +14,8 @@
 </div>
 <br>
 只需提供一个视频 <b>主题</b> 或 <b>关键词</b> ，就可以全自动生成视频文案、视频素材、视频字幕、视频背景音乐，然后合成一个高清的短视频。
-拉取项目后对docker-compose.yml、Dockerfile、app/config/config.py、app/config/__init__.py、config.example.toml等5个文件做了修改，可以在国内的linux服务器中通过docker-compose.yml文件启动服务
+拉取项目后对docker-compose.yml、Dockerfile、app/config/config.py、app/config/__init__.py、config.example.toml等5个文件做了修改，可以在国内的linux服务器中通过docker-compose.yml文件启动服务。
+对应版本：v1.2.6 Latest
 <br>
 
 <h4>Web界面</h4>
