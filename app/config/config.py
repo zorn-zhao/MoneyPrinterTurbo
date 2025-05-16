@@ -1,78 +1,96 @@
 import os
 import shutil
 import socket
-
+import tempfile
+import types
 import toml
 from loguru import logger
 
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-config_file = f"{root_dir}/config.toml"
+config_file = os.getenv('CONFIG_FILE', f"{root_dir}/config.toml")
 
-
-def load_config():
-    # fix: IsADirectoryError: [Errno 21] Is a directory: '/MoneyPrinterTurbo/config.toml'
-    if os.path.isdir(config_file):
-        shutil.rmtree(config_file)
-
-    if not os.path.isfile(config_file):
-        example_file = f"{root_dir}/config.example.toml"
-        if os.path.isfile(example_file):
-            shutil.copyfile(example_file, config_file)
-            logger.info("copy config.example.toml to config.toml")
-
-    logger.info(f"load config from file: {config_file}")
-
+def safe_config_load(config_path):
+    """安全加载配置文件"""
+    if not os.path.exists(config_path):
+        return {}
     try:
-        _config_ = toml.load(config_file)
+        return toml.load(config_path)
     except Exception as e:
-        logger.warning(f"load config failed: {str(e)}, try to load as utf-8-sig")
-        with open(config_file, mode="r", encoding="utf-8-sig") as fp:
-            _cfg_content = fp.read()
-            _config_ = toml.loads(_cfg_content)
-    return _config_
+        logger.warning(f"Load config failed (first attempt): {str(e)}")
+        try:
+            with open(config_path, "r", encoding="utf-8-sig") as f:
+                content = f.read()
+                return toml.loads(content)
+        except Exception as e2:
+            logger.error(f"Failed to load config: {str(e2)}")
+            return {}
 
+def load_or_create_config():
+    """加载或创建默认配置文件"""
+    os.makedirs(os.path.dirname(config_file), exist_ok=True, mode=0o777)
+    
+    if not os.path.exists(config_file):
+        example_file = f"{root_dir}/config.example.toml"
+        if os.path.exists(example_file):
+            logger.info("Creating config from example file")
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode='w', 
+                    dir=os.path.dirname(config_file),
+                    delete=False,
+                    encoding='utf-8'
+                ) as tmp:
+                    with open(example_file, 'r', encoding='utf-8') as f:
+                        tmp.write(f.read())
+                    os.chmod(tmp.name, 0o777)
+                    os.replace(tmp.name, config_file)
+            except Exception as e:
+                logger.error(f"Failed to create config file: {str(e)}")
+    return safe_config_load(config_file)
+
+# 初始化全局配置
+try:
+    _cfg = load_or_create_config()
+except Exception as e:
+    logger.critical(f"Config initialization failed: {str(e)}")
+    _cfg = {}
+
+# 确保所有必需的配置项存在
+_cfg.setdefault("app", {})
+_cfg.setdefault("whisper", {})
+_cfg.setdefault("proxy", {})
+_cfg.setdefault("azure", {})
+_cfg.setdefault("siliconflow", {})
+_cfg.setdefault("ui", {"hide_log": False, "language": "en-US"})
+_cfg.setdefault("log_level", "INFO")       # 确保日志级别存在
+_cfg.setdefault("project_version", "1.2.6")  # 确保项目版本存在
+
+# 创建config对象
+config = types.SimpleNamespace()
+config.log_level = _cfg["log_level"]
+config.app = _cfg["app"]
+config.whisper = _cfg["whisper"]
+config.proxy = _cfg["proxy"]
+config.azure = _cfg["azure"]
+config.siliconflow = _cfg["siliconflow"]
+config.ui = _cfg["ui"]
+config.project_version = _cfg["project_version"]  # 确保项目版本可用
 
 def save_config():
-    with open(config_file, "w", encoding="utf-8") as f:
-        _cfg["app"] = app
-        _cfg["azure"] = azure
-        _cfg["siliconflow"] = siliconflow
-        _cfg["ui"] = ui
-        f.write(toml.dumps(_cfg))
+    """安全保存配置到文件"""
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode='w',
+            dir=os.path.dirname(config_file),
+            delete=False,
+            encoding='utf-8'
+        ) as tmp:
+            toml.dump(_cfg, tmp)
+            os.chmod(tmp.name, 0o777)
+            os.replace(tmp.name, config_file)
+            return True
+    except Exception as e:
+        logger.error(f"Failed to save config: {str(e)}")
+        return False
 
-
-_cfg = load_config()
-app = _cfg.get("app", {})
-whisper = _cfg.get("whisper", {})
-proxy = _cfg.get("proxy", {})
-azure = _cfg.get("azure", {})
-siliconflow = _cfg.get("siliconflow", {})
-ui = _cfg.get(
-    "ui",
-    {
-        "hide_log": False,
-    },
-)
-
-hostname = socket.gethostname()
-
-log_level = _cfg.get("log_level", "DEBUG")
-listen_host = _cfg.get("listen_host", "0.0.0.0")
-listen_port = _cfg.get("listen_port", 8080)
-project_name = _cfg.get("project_name", "MoneyPrinterTurbo")
-project_description = _cfg.get(
-    "project_description",
-    "<a href='https://github.com/harry0703/MoneyPrinterTurbo'>https://github.com/harry0703/MoneyPrinterTurbo</a>",
-)
-project_version = _cfg.get("project_version", "1.2.6")
-reload_debug = False
-
-imagemagick_path = app.get("imagemagick_path", "")
-if imagemagick_path and os.path.isfile(imagemagick_path):
-    os.environ["IMAGEMAGICK_BINARY"] = imagemagick_path
-
-ffmpeg_path = app.get("ffmpeg_path", "")
-if ffmpeg_path and os.path.isfile(ffmpeg_path):
-    os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_path
-
-logger.info(f"{project_name} v{project_version}")
+config.save_config = save_config
