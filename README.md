@@ -14,6 +14,7 @@
 </div>
 <br>
 只需提供一个视频 <b>主题</b> 或 <b>关键词</b> ，就可以全自动生成视频文案、视频素材、视频字幕、视频背景音乐，然后合成一个高清的短视频。
+拉取项目后对docker-compose.yml、Dockerfile、app/config/config.py、app/config/__init__.py等4个文件做了修改，可以在国内的linux服务器中通过docker-compose.yml文件启动服务
 <br>
 
 <h4>Web界面</h4>
@@ -179,6 +180,33 @@ docker-compose up
 #### ③ 访问API文档
 
 打开浏览器，访问 http://0.0.0.0:8080/docs 或者 http://0.0.0.0:8080/redoc
+
+### docker-compose 方式部署服务
+#### 1、清理环境：
+```shell
+docker compose down -v && \
+docker system prune -af && \
+find . -name '__pycache__' -exec rm -rf {} + && \
+find . -name '*.pyc' -delete
+```
+
+#### 2、重建服务：
+```shell
+DOCKER_BUILDKIT=1 docker compose build --no-cache && \
+docker compose up -d
+```
+
+#### 3、验证加载顺序：
+```shell
+docker exec -it moneyprinterturbo-webui python -c "
+from app.config import _init_config; 
+cfg = _init_config(); 
+print(f'Config loaded: {hasattr(cfg, \"log_level\")}')"
+# 期望输出：Config loaded: True
+```
+
+#### 4、访问Web界面
+打开浏览器，访问 http://0.0.0.0:8501
 
 ### 手动部署 📦
 
